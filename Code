@@ -1,0 +1,65 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import plotly.express as px
+
+# Import and clean first dataset
+df1 = pd.read_csv("data/brasil-real-estate-1.csv")
+df1.dropna(inplace=True)
+
+# Split compound columns and convert types
+df1[["lat", "lon"]] = df1["lat-lon"].str.split(",", expand=True).astype(float)
+df1["state"] = df1["place_with_parent_names"].str.split("|", expand=True)[2]
+
+# Clean price data
+df1["price_usd"] = df1["price_usd"].str.replace("$", "", regex=False)\
+                                  .str.replace(",", "", regex=False)\
+                                  .astype(float)
+
+# Remove redundant columns
+df1.drop(columns=["lat-lon", "place_with_parent_names"], inplace=True)
+# Process second dataset
+df2 = pd.read_csv("data/brasil-real-estate-2.csv")
+df2["price_usd"] = df2["price_brl"]/3.19
+df2.dropna(inplace=True)
+df2.drop(columns=["price_brl"], inplace=True)
+
+# Combine datasets
+df = pd.concat([df1, df2])
+# Create interactive map visualization
+fig = px.scatter_mapbox(
+    df, 
+    lat="lat", 
+    lon="lon",
+    center={"lat": -14.2, "lon": -51.9},
+    width=600, 
+    height=600,
+    hover_data=["price_usd"]
+)
+fig.update_layout(mapbox_style="open-street-map")
+# Generate summary statistics
+summary_stats = df[["area_m2", "price_usd"]].describe()
+
+# Price distribution analysis
+plt.hist(df["price_usd"])
+plt.xlabel("Price [USD]")
+plt.ylabel("Frequency")
+plt.title("Distribution of Home Prices")
+
+# Area distribution analysis
+plt.boxplot(df["area_m2"])
+plt.xlabel("Area [sq meters]")
+plt.title("Distribution of Home Sizes")
+# Calculate regional price averages
+mean_price_by_region = df.groupby("region")["price_usd"].mean()\
+                         .sort_values(ascending=True).head(5)
+
+# Analyze southern states
+south_states = ['Paraná', 'Santa Catarina', 'Rio Grande do Sul']
+south_df = df[df['state'].isin(south_states)]
+
+# Calculate state-wise correlations
+south_states_corr = {}
+for state in south_states:
+    state_data = south_df[south_df['state'] == state]
+    correlation = state_data['area_m2'].corr(state_data['price_usd'])
+    south_states_corr[state] = correlation
